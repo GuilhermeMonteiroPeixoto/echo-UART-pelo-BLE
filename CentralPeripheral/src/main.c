@@ -280,21 +280,32 @@ static void gatt_write(uint16_t handle, char *chrc_data)
 
 static void read_entry(void)
 {
+	// Inicializa a interface de linha de comando para entrada de dados do usuário.
 	console_getline_init();
+
+	// Uma flag utilizada para garantir que a descoberta de serviços e a subscrição ocorram apenas uma vez.
 	bool flag = true;
+
+	// Loop infinito para receber entradas do usuário continuamente.
 	while (true)
 	{
 		printk(">");
+		// Aguarda o usuário digitar uma linha de texto e pressionar enter.
 		char *s = console_getline();
 
+		// Imprime a linha digitada pelo usuário
 		printk("Typed line: %s\n", s);
-		// Send data to peripheral
+		// Na primeira passagem pelo loop, descobre as características do dispositivo periférico e se inscreve para notificações.
 		if (flag)
 		{
+			// Descobre os serviços e características do dispositivo periférico.
 			gatt_discover();
+			// Se inscreve para notificações da característica desejada.
 			gatt_subscribe();
 		}
+		// Envia a linha digitada pelo usuário para o dispositivo periférico via BLE.
 		gatt_write(chrc_handle, s);
+		// Após a primeira execução, desativa a flag para não repetir a descoberta e subscrição.
 		flag = false;
 	}
 }
@@ -302,25 +313,28 @@ static void read_entry(void)
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 						 struct net_buf_simple *ad)
 {
+	// Armazena a representação em string do endereço Bluetooth do dispositivo encontrado.
 	char addr_str[BT_ADDR_LE_STR_LEN];
 	int err;
 
+	// Verifica se já existe uma conexão padrão estabelecida. Se sim, retorna imediatamente.
 	if (default_conn)
 	{
 		return;
 	}
 
-	// Filtra apenas os eventos de anúncio que indicam dispositivos conectáveis.
-	if (type != BT_GAP_ADV_TYPE_ADV_IND &&
-		type != BT_GAP_ADV_TYPE_ADV_DIRECT_IND)
+	// Verifica o tipo de anúncio para filtrar apenas eventos que indicam um dispositivo conectável.
+	if (type != BT_GAP_ADV_TYPE_ADV_IND &&		// Anúncio indicativo geral
+		type != BT_GAP_ADV_TYPE_ADV_DIRECT_IND) // Anúncio indicativo direto
 	{
 		return;
 	}
 
+	// Converte o endereço Bluetooth do dispositivo encontrado para uma string e imprime junto com o RSSI (indicador de força do sinal).
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 	printk("Device found: %s (RSSI %d)\n", addr_str, rssi);
 
-	/* connect only to devices in close proximity */
+	// Filtra dispositivos baseando-se na força do sinal (RSSI) para limitar a conexões com dispositivos próximos.
 	if (rssi < -70)
 	{
 		return;
@@ -333,11 +347,12 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		return;
 	}
 
-	// Tenta criar uma conexão BLE com o dispositivo encontrado.
+	// Inicia uma tentativa de criar uma conexão BLE com o dispositivo encontrado usando os parâmetros padrão de conexão.
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN,
 							BT_LE_CONN_PARAM_DEFAULT, &default_conn);
 	if (err)
 	{
+		// Se a tentativa de conexão falhar, imprime uma mensagem de erro e reinicia a varredura.
 		printk("Create conn to %s failed (%u)\n", addr_str, err);
 		start_scan();
 	}
@@ -347,8 +362,7 @@ static void start_scan(void)
 {
 	int err;
 
-	// Inicia uma varredura BLE passiva. Diferentemente de uma varredura ativa,
-	// uma varredura passiva apenas escuta os anúncios BLE sem enviar pedidos de anúncio.
+	// Inicia uma varredura BLE passiva - apenas escuta os anúncios BLE sem enviar pedidos de anúncio.
 	// O segundo argumento, 'device_found', é um callback chamado para cada dispositivo descoberto.
 	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
 	if (err)
